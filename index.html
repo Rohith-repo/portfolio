@@ -272,7 +272,7 @@ main{margin-left:var(--sidebar-w);flex:1;min-width:0;position:relative;z-index:1
   font-family:var(--font-mono);font-size:0.68rem;padding:4px 10px;border-radius:999px;
   border:1px solid var(--border-soft);color:var(--text-2);
 }
-.tag-glow{border-color:rgba(0,245,255,0.35);color:var(--primary);background:rgba(0,245,255,0.06);}
+.tag-glow{border-color:rgba(0,245,255,0.35);color:var(--primary);background:rgba(0,245,255,0.06);padding: auto;}
 
 /* ============================= HERO ============================= */
 .hero{
@@ -856,6 +856,8 @@ footer{border-top:1px solid var(--border-soft);padding:30px 56px;max-width:1180p
         <h1><span class="hi">Hi, I'm</span><span class="name" id="heroName">Rohith</span></h1>
         <p class="hero-tagline">Just a guy making cool things and chasing ideas.</p>
         <div class="hero-chips">
+          <span class="tag tag-glow">B.Tech AI&DS</span>
+          <span class="tag tag-glow">M.E CSE</span>
           <span class="tag tag-glow">Machine Learning</span>
           <span class="tag tag-glow">DevOps</span>
           <span class="tag tag-glow">Cloud</span>
@@ -865,10 +867,14 @@ footer{border-top:1px solid var(--border-soft);padding:30px 56px;max-width:1180p
         <div class="hero-actions">
           <a href="#projects" class="btn btn-primary">See what I've broken</a>
           <!-- <a href="#terminal" class="btn btn-outline">Open Console</a> -->
-          <button class="btn btn-outline" id="resumeBtn">
+          <!-- <button class="btn btn-outline" id="resumeBtn"> -->
+            <a href="Rohith-Resume.pdf"
+              class="btn btn-outline"
+              download="Rohith-Resume.pdf"
+              target="_blank">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 19h14"/></svg>
             <span id="resumeBtnText">The Paper Version</span>
-          </button>
+          </a>
         </div>
       </div>
       <div class="hero-right">
