@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Your TVA Card — Rohith</title>
+<meta name="description" content="Upload a photo, pick a filter, and download your own TVA clearance card.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4EEDD;
+  --bg-elev:#F0EDE6;
+  --surface:#FFFCF3;
+  --border-soft:rgba(10,10,10,0.08);
+
+  --ink:#221F19;
+  --ink-soft:#726C5B;
+
+  --sage:#3E8F5F;
+  --sage-soft:#E4EEDF;
+
+  --coral:#FF6B4A;
+  --coral-soft:#FFE6DC;
+  --danger:#FF4D6D;
+
+  --navy:#161B2C;
+
+  --font-pixel:'Silkscreen', monospace;
+  --font-mono:'Space Mono', monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-mono);
+  line-height:1.6;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+h1,h2,h3,h4{font-family:var(--font-pixel);font-weight:400;letter-spacing:-0.01em;color:var(--ink);}
+a{color:inherit;text-decoration:none;}
+button{font-family:inherit;cursor:pointer;}
+img{max-width:100%;display:block;}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.001ms !important;animation-iteration-count:1 !important;transition-duration:0.001ms !important;}
+}
+
+.grid-overlay{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(46,125,50,.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46,125,50,.35) 1px, transparent 1px);
+  background-size:42px 42px;
+  mask-image:radial-gradient(ellipse 80% 60% at 50% 10%, #000 55%, transparent 90%);
+}
+.vignette{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 90% 70% at 50% 0%, transparent 70%, rgba(0,0,0,.06) 88%, rgba(0,0,0,.14) 100%);
+}
+
+/* ============ shared component styles, lifted from the portfolio ============ */
+.glass{
+  background:var(--surface);
+  border:2px solid var(--ink);
+  box-shadow:5px 5px 0 var(--ink);
+  border-radius:0;
+}
+.btn{
+  border:3px solid var(--ink);
+  background:#fff;
+  color:var(--ink);
+  font-family:var(--font-mono);
+  font-size:0.82rem;
+  box-shadow:4px 4px 0 var(--ink);
+  transition:.12s;
+  padding:12px 18px;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink);}
+.btn:active{transform:translate(4px,4px);box-shadow:0 0 0 var(--ink);}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:4px 4px 0 var(--ink);}
+.btn-primary{background:var(--sage);color:#fff;}
+.btn-outline{background:#fff;color:var(--ink);}
+.btn-coral{background:var(--coral);color:#fff;}
+.btn-block{width:100%;}
+
+.tag{
+  font-family:var(--font-mono);font-size:0.68rem;padding:4px 10px;
+  border:1px solid var(--border-soft);color:var(--ink-soft);
+}
+.eyebrow{
+  font-family:var(--font-mono);font-size:0.72rem;color:var(--sage);letter-spacing:0.1em;
+  display:inline-flex;align-items:center;gap:8px;margin-bottom:10px;
+}
+.eyebrow::before{content:'//';color:var(--coral);}
+
+/* ============ topbar ============ */
+.topbar{
+  position:relative;z-index:5;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:20px 28px;max-width:1180px;margin:0 auto;
+}
+.brand-mark{font-family:var(--font-pixel);font-size:1.1rem;color:var(--ink);}
+.brand-sub{font-family:var(--font-mono);font-size:0.62rem;color:var(--ink-soft);letter-spacing:0.08em;margin-top:2px;}
+
+/* ============ layout ============ */
+.studio{
+  position:relative;z-index:1;
+  max-width:1180px;margin:0 auto;
+  padding:20px 28px 100px;
+  display:grid;grid-template-columns:1.15fr .85fr;gap:34px;
+  align-items:start;
+}
+@media (max-width:900px){
+  .studio{grid-template-columns:1fr;padding:10px 18px 70px;}
+  .topbar{padding:16px 18px;}
+}
+
+.viewer-card{
+  padding:10px;position:relative;
+}
+.viewer-stage{
+  position:relative;
+  width:100%;
+  aspect-ratio: 3 / 4;
+  background:
+    radial-gradient(ellipse 120% 100% at 50% 0%, #FBF7EA 0%, #EFE9D8 100%);
+  border:2px dashed var(--border-soft);
+  overflow:hidden;
+  touch-action:none;
+}
+.viewer-stage canvas{display:block;width:100%;height:100%;cursor:grab;}
+.viewer-stage canvas:active{cursor:grabbing;}
+.viewer-hint{
+  position:absolute;left:14px;bottom:14px;
+  font-family:var(--font-mono);font-size:0.68rem;color:var(--ink-soft);
+  background:rgba(255,252,243,0.85);border:1px solid var(--border-soft);
+  padding:6px 10px;display:flex;align-items:center;gap:6px;
+}
+.viewer-loading{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;background:rgba(244,238,221,0.92);font-family:var(--font-mono);font-size:0.78rem;color:var(--ink-soft);
+  transition:opacity .3s ease;
+}
+.spinner{
+  width:26px;height:26px;border:3px solid var(--border-soft);border-top-color:var(--coral);
+  border-radius:50%;animation:spin .9s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.viewer-caption{padding:14px 6px 4px;font-size:0.78rem;color:var(--ink-soft);}
+
+/* ============ control panel ============ */
+.panel{padding:26px;display:flex;flex-direction:column;gap:26px;}
+.panel h3{font-size:0.95rem;margin-bottom:4px;}
+.step-label{font-family:var(--font-mono);font-size:0.68rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.step-num{
+  width:20px;height:20px;border:2px solid var(--ink);display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--font-pixel);font-size:0.62rem;background:#fff;flex-shrink:0;
+}
+
+.upload-drop{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  width:100%;box-sizing:border-box;
+  border:2px dashed var(--border-soft);padding:22px;text-align:center;cursor:pointer;
+  transition:border-color .15s ease, background .15s ease;
+}
+.upload-drop:hover, .upload-drop.drag{border-color:var(--sage);background:var(--sage-soft);}
+.upload-drop svg{display:block;margin:0 auto 8px;opacity:0.7;flex-shrink:0;}
+.upload-drop .main-txt{font-size:0.84rem;color:var(--ink);line-height:1.4;}
+.upload-drop .sub-txt{font-size:0.68rem;color:var(--ink-soft);margin-top:4px;line-height:1.4;}
+.upload-filename{font-size:0.72rem;color:var(--sage);margin-top:10px;word-break:break-all;width:100%;}
+#fileInput{display:none;}
+
+.filter-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+@media (max-width:520px){.filter-grid{grid-template-columns:repeat(3,1fr);}}
+.filter-swatch{
+  border:2px solid var(--ink);background:#fff;padding:0;overflow:hidden;
+  display:flex;flex-direction:column;align-items:stretch;
+  opacity:0.4;pointer-events:none;transition:all .15s ease;
+}
+.filter-swatch.enabled{opacity:1;pointer-events:auto;cursor:pointer;}
+.filter-swatch canvas{width:100%;aspect-ratio:3/4;display:block;background:var(--bg-elev);}
+.filter-swatch span{font-family:var(--font-mono);font-size:0.6rem;padding:5px 3px;text-align:center;color:var(--ink-soft);border-top:1px solid var(--border-soft);}
+.filter-swatch.active{border-color:var(--coral);box-shadow:3px 3px 0 var(--coral);}
+.filter-swatch.active span{color:var(--coral);}
+
+.privacy-note{
+  display:flex;gap:10px;align-items:flex-start;
+  font-size:0.68rem;color:var(--ink-soft);padding-top:6px;border-top:1px dashed var(--border-soft);
+}
+.privacy-note svg{flex-shrink:0;margin-top:2px;}
+
+.download-note{font-size:0.68rem;color:var(--ink-soft);text-align:center;margin-top:2px;}
+
+/* ============ modals ============ */
+.modal-backdrop{
+  position:fixed;inset:0;z-index:200;background:rgba(22,27,44,0.55);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  backdrop-filter:blur(3px);
+}
+.modal-backdrop.hidden{display:none;}
+.modal-box{
+  max-width:440px;width:100%;padding:30px;
+  animation:popIn .25s ease;
+}
+@keyframes popIn{from{opacity:0;transform:translateY(14px) scale(.98);}to{opacity:1;transform:none;}}
+.modal-box h2{font-size:1.2rem;margin-bottom:14px;}
+.modal-box p{font-size:0.85rem;color:var(--ink-soft);margin-bottom:10px;}
+.modal-box .modal-list{margin:14px 0 20px;padding-left:0;list-style:none;}
+.modal-box .modal-list li{
+  font-size:0.78rem;color:var(--ink-soft);padding-left:20px;position:relative;margin-bottom:8px;
+}
+.modal-box .modal-list li::before{content:'✓';position:absolute;left:0;color:var(--sage);font-family:var(--font-pixel);}
+.modal-actions{display:flex;flex-direction:column;gap:10px;margin-top:6px;}
+.modal-actions .btn{width:100%;}
+
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--ink);color:#fff;font-family:var(--font-mono);font-size:0.78rem;
+  padding:12px 20px;border:2px solid var(--ink);box-shadow:4px 4px 0 rgba(0,0,0,0.3);
+  z-index:300;opacity:0;pointer-events:none;transition:all .25s ease;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* confetti burst on success */
+.confetti-layer{position:fixed;inset:0;pointer-events:none;z-index:250;overflow:hidden;}
+.confetti-bit{position:absolute;width:7px;height:7px;animation:confettiFall linear forwards;}
+@keyframes confettiFall{
+  from{transform:translateY(-10px) rotate(0deg);opacity:1;}
+  to{transform:translateY(70vh) rotate(540deg);opacity:0;}
+}
+</style>
+</head>
+<body>
+<div class="grid-overlay"></div>
+<div class="vignette"></div>
+
+<header class="topbar">
+  <div>
+    <div class="brand-mark">&lt;/ROHITH&gt;</div>
+    <div class="brand-sub">TVA Loki Card Studio</div>
+  </div>
+  <a href="index.html" class="btn btn-outline">← Portfolio</a>
+</header>
+
+<main class="studio">
+  <!-- VIEWER -->
+  <section class="viewer-card glass">
+    <div class="viewer-stage" id="viewerStage">
+      <canvas id="viewerCanvas"></canvas>
+      <div class="viewer-hint">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3v4M15 3v4M9 21v-4M15 21v-4M3 9h4M3 15h4M21 9h-4M21 15h-4"/></svg>
+        Drag to rotate
+      </div>
+      <div class="viewer-loading" id="viewerLoading">
+        <div class="spinner"></div>
+        <span id="loadingLabel">Loading card model…</span>
+      </div>
+    </div>
+    <p class="viewer-caption">Your card, rendered live. Nothing here ever leaves your browser.</p>
+  </section>
+
+  <!-- CONTROLS -->
+  <section class="panel glass">
+    <div>
+      <div class="eyebrow">STEP 01</div>
+      <h3>Upload your photo</h3>
+    </div>
+    <div>
+      <label class="upload-drop" id="uploadDrop" for="fileInput">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <div class="main-txt">Click or drop an image</div>
+        <div class="sub-txt">JPG or PNG · used to fill your card's photo window</div>
+        <div class="upload-filename" id="uploadFilename"></div>
+      </label>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div>
+      <div class="step-label"><span class="step-num">02</span> Pick a filter</div>
+      <div class="filter-grid" id="filterGrid"></div>
+    </div>
+
+    <div>
+      <div class="step-label"><span class="step-num">03</span> Export</div>
+      <button class="btn btn-primary btn-block" id="downloadBtn" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 19h14"/></svg>
+        <span id="downloadBtnText">Download Card (.zip)</span>
+      </button>
+      <div class="download-note">High-res PNG · front &amp; back</div>
+    </div>
+
+    <div class="privacy-note">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      <span>Your photo is processed entirely on your device. We don't upload, store, or see it — the ZIP is built and saved straight from your browser.</span>
+    </div>
+  </section>
+</main>
+
+<!-- DISCLAIMER MODAL -->
+<div class="modal-backdrop" id="disclaimerModal">
+  <div class="modal-box glass">
+    <div class="eyebrow">BEFORE YOU BEGIN</div>
+    <h2>Your data stays with you</h2>
+    <p>This card builder runs entirely in your browser.</p>
+    <ul class="modal-list">
+      <li>Your photo is never uploaded to a server</li>
+      <li>Nothing is stored, logged, or shared — not even with us</li>
+      <li>Close this tab and everything is gone</li>
+    </ul>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="proceedBtn">Got it — let's build my card</button>
+    </div>
+  </div>
+</div>
+
+<!-- SUCCESS MODAL -->
+<div class="modal-backdrop hidden" id="successModal">
+  <div class="modal-box glass">
+    <div class="eyebrow">CLEARANCE GRANTED</div>
+    <h2>Your card is downloaded</h2>
+    <p>Front and back, high resolution, ready to share or print.</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="makeAnotherBtn">Make another card</button>
+      <button class="btn btn-outline" id="shareBtn">Share</button>
+      <button class="btn btn-primary" id="visitPortfolioBtn">Visit Portfolio</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="confetti-layer" id="confettiLayer"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const CONFIG = {
+  glbPath: './tva-card.glb',
+  placeholderNodeName: 'USER_IMAGE_PLACEHOLDER',
+  texW: 900,
+  texH: 1205, // matches the photo window's aspect ratio (~0.747)
+  idleDelayMs: 4200,      // 3-5s idle before it eases back
+  returnDurationMs: 900,
+  autoRotateSpeed: 0.35,  // rad/sec
+  dragSensitivity: 0.0065,
+  tiltClamp: 0.38
+};
+
+const FILTERS = [
+  { id: 'original', label: 'Original' },
+  { id: 'noir',      label: 'Noir' },
+  { id: 'sepia',     label: 'Sepia' },
+  { id: 'neon',      label: 'Neon' },
+  { id: 'duotone',   label: 'TVA Duotone' }
+];
+let currentFilter = 'original';
+
+/* ============================================================
+   DOM refs
+   ============================================================ */
+const stage = document.getElementById('viewerStage');
+const canvas = document.getElementById('viewerCanvas');
+const loadingEl = document.getElementById('viewerLoading');
+const loadingLabel = document.getElementById('loadingLabel');
+const fileInput = document.getElementById('fileInput');
+const uploadDrop = document.getElementById('uploadDrop');
+const uploadFilename = document.getElementById('uploadFilename');
+const filterGrid = document.getElementById('filterGrid');
+const downloadBtn = document.getElementById('downloadBtn');
+const downloadBtnText = document.getElementById('downloadBtnText');
+const disclaimerModal = document.getElementById('disclaimerModal');
+const proceedBtn = document.getElementById('proceedBtn');
+const successModal = document.getElementById('successModal');
+const makeAnotherBtn = document.getElementById('makeAnotherBtn');
+const shareBtn = document.getElementById('shareBtn');
+const visitPortfolioBtn = document.getElementById('visitPortfolioBtn');
+const toastEl = document.getElementById('toast');
+const confettiLayer = document.getElementById('confettiLayer');
+
+/* ============================================================
+   DISCLAIMER MODAL
+   ============================================================ */
+proceedBtn.addEventListener('click', () => {
+  disclaimerModal.classList.add('hidden');
+});
+
+/* ============================================================
+   THREE.JS SCENE
+   ============================================================ */
+const scene = new THREE.Scene();
+scene.background = null;
+
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 5000);
+camera.position.set(0, 0, 400);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+scene.add(new THREE.HemisphereLight(0xfff3e0, 0x1a1420, 1.15));
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
+keyLight.position.set(80, 140, 220);
+scene.add(keyLight);
+const fillLight = new THREE.DirectionalLight(0xffd9c2, 0.45);
+fillLight.position.set(-120, -60, 140);
+scene.add(fillLight);
+const rimLight = new THREE.DirectionalLight(0xbfe0ff, 0.35);
+rimLight.position.set(0, -160, -200);
+scene.add(rimLight);
+
+const cardGroup = new THREE.Group();
+scene.add(cardGroup);
+
+let modelRoot = null;
+let placeholderMesh = null;
+let uploadedImage = null;
+let filterThumbCanvases = {};
+
+function remapUV(geometry) {
+  const uv = geometry.attributes.uv;
+  if (!uv) return;
+  let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+  for (let i = 0; i < uv.count; i++) {
+    const u = uv.getX(i), v = uv.getY(i);
+    if (u < uMin) uMin = u; if (u > uMax) uMax = u;
+    if (v < vMin) vMin = v; if (v > vMax) vMax = v;
+  }
+  const uSpan = (uMax - uMin) || 1, vSpan = (vMax - vMin) || 1;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, (uv.getX(i) - uMin) / uSpan, (uv.getY(i) - vMin) / vSpan);
+  }
+  uv.needsUpdate = true;
+}
+
+function fitCameraToCard(paddingFactor) {
+  const box = new THREE.Box3().setFromObject(cardGroup);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const fov = camera.fov * Math.PI / 180;
+  const maxVertical = Math.max(size.y, size.x / camera.aspect);
+  let dist = (maxVertical / 2) / Math.tan(fov / 2);
+  dist *= paddingFactor;
+  camera.position.set(0, 0, dist);
+  camera.near = Math.max(dist / 100, 0.1);
+  camera.far = dist * 10;
+  camera.updateProjectionMatrix();
+  return { size, dist };
+}
+
+function resizeRendererToStage() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if (w === 0 || h === 0) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  if (modelRoot) fitCameraToCard(1.32);
+}
+window.addEventListener('resize', resizeRendererToStage);
+
+const loader = new GLTFLoader();
+loader.load(
+  CONFIG.glbPath,
+  (gltf) => {
+    modelRoot = gltf.scene;
+    modelRoot.traverse((obj) => {
+      if (obj.isMesh) {
+        if (!obj.geometry.attributes.normal) obj.geometry.computeVertexNormals();
+        if (obj.name === CONFIG.placeholderNodeName) {
+          placeholderMesh = obj;
+          remapUV(obj.geometry);
+        }
+      }
+    });
+    // center the model at the group's local origin
+    const box = new THREE.Box3().setFromObject(modelRoot);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    modelRoot.position.sub(center);
+
+    cardGroup.add(modelRoot);
+    resizeRendererToStage();
+    fitCameraToCard(1.32);
+
+    loadingEl.style.opacity = '0';
+    setTimeout(() => { loadingEl.style.display = 'none'; }, 300);
+  },
+  (progress) => {
+    if (progress.total) {
+      const pct = Math.round((progress.loaded / progress.total) * 100);
+      loadingLabel.textContent = `Loading card model… ${pct}%`;
+    }
+  },
+  (err) => {
+    console.error(err);
+    loadingLabel.textContent = 'Could not load tva-card.glb — make sure it sits next to this file and is served over http(s).';
+  }
+);
+
+/* ============================================================
+   ROTATION: drag / idle / smooth-return / auto-rotate
+   ============================================================ */
+let mode = 'auto'; // 'auto' | 'dragging' | 'idle' | 'returning' | 'frozen'
+let isDragging = false;
+let prevPointer = { x: 0, y: 0 };
+let lastInteraction = performance.now();
+let returnStart = 0;
+let returnFrom = { x: 0, y: 0 };
+let returnTo = { x: 0, y: 0 };
+
+function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+
+function onPointerDown(e) {
+  if (mode === 'frozen') return;
+  isDragging = true;
+  mode = 'dragging';
+  prevPointer = { x: e.clientX, y: e.clientY };
+  canvas.setPointerCapture(e.pointerId);
+}
+function onPointerMove(e) {
+  if (!isDragging) return;
+  const dx = e.clientX - prevPointer.x;
+  const dy = e.clientY - prevPointer.y;
+  prevPointer = { x: e.clientX, y: e.clientY };
+  cardGroup.rotation.y += dx * CONFIG.dragSensitivity;
+  cardGroup.rotation.x = THREE.MathUtils.clamp(
+    cardGroup.rotation.x + dy * CONFIG.dragSensitivity, -CONFIG.tiltClamp, CONFIG.tiltClamp
+  );
+  lastInteraction = performance.now();
+}
+function onPointerUp() {
+  if (!isDragging) return;
+  isDragging = false;
+  if (mode !== 'frozen') mode = 'idle';
+  lastInteraction = performance.now();
+}
+canvas.addEventListener('pointerdown', onPointerDown);
+canvas.addEventListener('pointermove', onPointerMove);
+window.addEventListener('pointerup', onPointerUp);
+window.addEventListener('pointercancel', onPointerUp);
+
+let lastFrameTime = performance.now();
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = (now - lastFrameTime) / 1000;
+  lastFrameTime = now;
+
+  if (mode === 'idle') {
+    if (now - lastInteraction > CONFIG.idleDelayMs) {
+      mode = 'returning';
+      returnStart = now;
+      returnFrom = { x: cardGroup.rotation.x, y: cardGroup.rotation.y };
+      const targetY = Math.round(cardGroup.rotation.y / (Math.PI * 2)) * Math.PI * 2;
+      returnTo = { x: 0, y: targetY };
+    }
+  } else if (mode === 'returning') {
+    const t = Math.min(1, (now - returnStart) / CONFIG.returnDurationMs);
+    const eased = easeInOutCubic(t);
+    cardGroup.rotation.x = THREE.MathUtils.lerp(returnFrom.x, returnTo.x, eased);
+    cardGroup.rotation.y = THREE.MathUtils.lerp(returnFrom.y, returnTo.y, eased);
+    if (t >= 1) mode = 'auto';
+  } else if (mode === 'auto') {
+    cardGroup.rotation.y += CONFIG.autoRotateSpeed * dt;
+  }
+
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+
+/* ============================================================
+   IMAGE FILTERS
+   ============================================================ */
+function hexToRgb(hex) {
+  const v = parseInt(hex.replace('#', ''), 16);
+  return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+}
+const DUOTONE_SHADOW = hexToRgb('#161B2C');
+const DUOTONE_HIGHLIGHT = hexToRgb('#FF6B4A');
+
+function applyDuotone(ctx, w, h) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+    d[i]     = DUOTONE_SHADOW.r + (DUOTONE_HIGHLIGHT.r - DUOTONE_SHADOW.r) * lum;
+    d[i + 1] = DUOTONE_SHADOW.g + (DUOTONE_HIGHLIGHT.g - DUOTONE_SHADOW.g) * lum;
+    d[i + 2] = DUOTONE_SHADOW.b + (DUOTONE_HIGHLIGHT.b - DUOTONE_SHADOW.b) * lum;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function cssFilterFor(id) {
+  switch (id) {
+    case 'noir':  return 'grayscale(1) contrast(1.15) brightness(0.94)';
+    case 'sepia': return 'sepia(0.75) saturate(1.3) contrast(1.05)';
+    case 'neon':  return 'saturate(1.9) hue-rotate(-12deg) contrast(1.12) brightness(1.05)';
+    default:      return 'none';
+  }
+}
+
+function buildFilteredCanvas(imgEl, filterId, outW, outH) {
+  const c = document.createElement('canvas');
+  c.width = outW; c.height = outH;
+  const ctx = c.getContext('2d');
+  const scale = Math.max(outW / imgEl.width, outH / imgEl.height);
+  const drawW = imgEl.width * scale, drawH = imgEl.height * scale;
+  const dx = (outW - drawW) / 2, dy = (outH - drawH) / 2;
+
+  if (filterId === 'duotone') {
+    ctx.filter = 'none';
+    ctx.drawImage(imgEl, dx, dy, drawW, drawH);
+    applyDuotone(ctx, outW, outH);
+  } else {
+    ctx.filter = cssFilterFor(filterId);
+    ctx.drawImage(imgEl, dx, dy, drawW, drawH);
+    ctx.filter = 'none';
+  }
+  return c;
+}
+
+let activeTexture = null;
+function updateCardTexture() {
+  if (!uploadedImage || !placeholderMesh) return;
+  const c = buildFilteredCanvas(uploadedImage, currentFilter, CONFIG.texW, CONFIG.texH);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  // This model's UVs (like the rest of its GLTF-authored meshes) assume flipY=false textures.
+  // CanvasTexture defaults to flipY=true, which is what was flipping the photo vertically.
+  tex.flipY = false;
+  tex.needsUpdate = true;
+
+  if (activeTexture) activeTexture.dispose();
+  activeTexture = tex;
+
+  placeholderMesh.material = new THREE.MeshStandardMaterial({
+    map: tex,
+    roughness: 0.55,
+    metalness: 0.0,
+    side: THREE.DoubleSide
+  });
+}
+
+function buildFilterGrid() {
+  filterGrid.innerHTML = '';
+  FILTERS.forEach((f) => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-swatch' + (f.id === currentFilter ? ' active' : '');
+    btn.type = 'button';
+    const c = document.createElement('canvas');
+    btn.appendChild(c);
+    const label = document.createElement('span');
+    label.textContent = f.label;
+    btn.appendChild(label);
+    btn.addEventListener('click', () => {
+      if (!uploadedImage) return;
+      currentFilter = f.id;
+      document.querySelectorAll('.filter-swatch').forEach(el => el.classList.remove('active'));
+      btn.classList.add('active');
+      updateCardTexture();
+    });
+    filterGrid.appendChild(btn);
+  });
+}
+buildFilterGrid();
+
+function refreshFilterThumbnails() {
+  const swatches = filterGrid.querySelectorAll('.filter-swatch');
+  swatches.forEach((el, i) => {
+    const f = FILTERS[i];
+    const c = el.querySelector('canvas');
+    if (!uploadedImage) {
+      el.classList.remove('enabled');
+      c.width = 90; c.height = 120;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#EFE9D8'; ctx.fillRect(0, 0, c.width, c.height);
+      return;
+    }
+    el.classList.add('enabled');
+    const thumb = buildFilteredCanvas(uploadedImage, f.id, 120, 160);
+    c.width = thumb.width; c.height = thumb.height;
+    c.getContext('2d').drawImage(thumb, 0, 0);
+  });
+}
+
+/* ============================================================
+   UPLOAD HANDLING
+   ============================================================ */
+function handleFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  uploadFilename.textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      uploadedImage = img;
+      currentFilter = 'original';
+      refreshFilterThumbnails();
+      document.querySelectorAll('.filter-swatch').forEach((el, i) => {
+        el.classList.toggle('active', FILTERS[i].id === currentFilter);
+      });
+      updateCardTexture();
+      downloadBtn.disabled = false;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+['dragover', 'dragenter'].forEach(evt =>
+  uploadDrop.addEventListener(evt, (e) => { e.preventDefault(); uploadDrop.classList.add('drag'); })
+);
+['dragleave', 'drop'].forEach(evt =>
+  uploadDrop.addEventListener(evt, (e) => { e.preventDefault(); uploadDrop.classList.remove('drag'); })
+);
+uploadDrop.addEventListener('drop', (e) => handleFile(e.dataTransfer.files[0]));
+
+/* ============================================================
+   HIGH-RES CAPTURE + ZIP DOWNLOAD
+   ============================================================ */
+async function captureFrontAndBack() {
+  const prevMode = mode;
+  mode = 'frozen';
+  const prevRotX = cardGroup.rotation.x, prevRotY = cardGroup.rotation.y;
+
+  const box = new THREE.Box3().setFromObject(cardGroup);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const exportW = 1500;
+  const exportH = Math.round(exportW / (size.x / size.y));
+
+  renderer.setSize(exportW, exportH, false);
+  camera.aspect = exportW / exportH;
+  fitCameraToCard(1.06);
+
+  cardGroup.rotation.set(0, 0, 0);
+  renderer.render(scene, camera);
+  const frontURL = renderer.domElement.toDataURL('image/png');
+
+  cardGroup.rotation.set(0, Math.PI, 0);
+  renderer.render(scene, camera);
+  const backURL = renderer.domElement.toDataURL('image/png');
+
+  cardGroup.rotation.set(prevRotX, prevRotY, 0);
+  resizeRendererToStage();
+  mode = prevMode === 'frozen' ? 'idle' : prevMode;
+  lastInteraction = performance.now();
+
+  return { frontURL, backURL };
+}
+
+downloadBtn.addEventListener('click', async () => {
+  if (!uploadedImage) return;
+  downloadBtn.disabled = true;
+  downloadBtnText.textContent = 'Rendering…';
+  try {
+    const { frontURL, backURL } = await captureFrontAndBack();
+    const zip = new JSZip();
+    zip.file('tva-card-front.png', frontURL.split(',')[1], { base64: true });
+    zip.file('tva-card-back.png', backURL.split(',')[1], { base64: true });
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'tva-card.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showSuccess();
+  } catch (err) {
+    console.error(err);
+    showToast('Something went wrong rendering the card — try again.');
+  } finally {
+    downloadBtn.disabled = false;
+    downloadBtnText.textContent = 'Download Card (.zip)';
+  }
+});
+
+/* ============================================================
+   SUCCESS MODAL + SHARE + RESET
+   ============================================================ */
+function showSuccess() {
+  successModal.classList.remove('hidden');
+  burstConfetti();
+}
+makeAnotherBtn.addEventListener('click', () => {
+  successModal.classList.add('hidden');
+  uploadedImage = null;
+  currentFilter = 'original';
+  fileInput.value = '';
+  uploadFilename.textContent = '';
+  downloadBtn.disabled = true;
+  refreshFilterThumbnails();
+  if (placeholderMesh) {
+    if (activeTexture) { activeTexture.dispose(); activeTexture = null; }
+    placeholderMesh.material = new THREE.MeshStandardMaterial({
+      color: 0x000000, transparent: true, opacity: 0, side: THREE.DoubleSide
+    });
+  }
+});
+shareBtn.addEventListener('click', async () => {
+  const shareData = {
+    title: 'My TVA Card',
+    text: 'I just built my own TVA clearance card — check it out.',
+    url: location.href.split('#')[0]
+  };
+  if (navigator.share) {
+    try { await navigator.share(shareData); } catch (e) { /* user cancelled */ }
+  } else {
+    try {
+      await navigator.clipboard.writeText(shareData.url);
+      showToast('Link copied to clipboard!');
+    } catch (e) {
+      showToast('Could not copy the link — copy it from the address bar.');
+    }
+  }
+});
+visitPortfolioBtn.addEventListener('click', () => { window.location.href = 'index.html'; });
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 2600);
+}
+
+function burstConfetti() {
+  const colors = ['#3E8F5F', '#FF6B4A', '#161B2C', '#F4EEDD'];
+  for (let i = 0; i < 46; i++) {
+    const bit = document.createElement('div');
+    bit.className = 'confetti-bit';
+    bit.style.left = Math.random() * 100 + 'vw';
+    bit.style.background = colors[Math.floor(Math.random() * colors.length)];
+    bit.style.animationDuration = (1.4 + Math.random() * 1.2) + 's';
+    bit.style.top = '-10px';
+    confettiLayer.appendChild(bit);
+    setTimeout(() => bit.remove(), 2800);
+  }
+}
+</script>
+</body>
+</html>
