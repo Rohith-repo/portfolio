@@ -202,7 +202,7 @@ img{max-width:100%;display:block;}
   display:flex;align-items:center;justify-content:center;padding:20px;
   backdrop-filter:blur(3px);
 }
-.modal-backdrop.hidden{display:none;}
+.modal-backdrop.hidden{display:none !important;pointer-events:none !important;}
 .modal-box{
   max-width:440px;width:100%;padding:30px;
   animation:popIn .25s ease;
@@ -233,6 +233,49 @@ img{max-width:100%;display:block;}
   from{transform:translateY(-10px) rotate(0deg);opacity:1;}
   to{transform:translateY(70vh) rotate(540deg);opacity:0;}
 }
+
+/* ============ PHOTO CROP TOOL ============ */
+.crop-modal{
+  position:fixed;inset:0;z-index:220;background:rgba(22,27,44,.78);
+  display:flex;align-items:center;justify-content:center;padding:18px;
+  backdrop-filter:blur(5px);
+}
+.crop-modal.hidden{display:none;}
+.crop-box{
+  width:min(760px,100%);max-height:calc(100vh - 36px);overflow:auto;
+  padding:24px;background:var(--surface);border:2px solid var(--ink);
+  box-shadow:7px 7px 0 var(--ink);
+}
+.crop-box h2{font-size:1.05rem;margin-bottom:5px;}
+.crop-help{font-size:.7rem;color:var(--ink-soft);margin-bottom:14px;}
+.crop-stage{
+  width:100%;display:flex;justify-content:center;align-items:center;
+  background:#151515;border:2px solid var(--ink);padding:12px;overflow:hidden;
+}
+#cropCanvas{
+  display:block;max-width:100%;height:auto;touch-action:none;cursor:grab;
+}
+#cropCanvas:active{cursor:grabbing;}
+.crop-controls{
+  display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap;
+}
+.crop-ratio{
+  font-size:.68rem;color:var(--ink-soft);padding:7px 10px;
+  border:1px solid var(--border-soft);
+}
+.crop-zoom{display:flex;align-items:center;gap:8px;font-size:.68rem;color:var(--ink-soft);}
+.crop-zoom input{width:150px;}
+.crop-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+@media(max-width:600px){
+  .crop-box{padding:16px;}
+  .crop-stage{padding:6px;}
+  .crop-controls{align-items:flex-start;flex-direction:column;}
+  .crop-zoom{width:100%;}
+  .crop-zoom input{flex:1;width:auto;}
+  .crop-actions{flex-direction:column;}
+  .crop-actions .btn{width:100%;}
+}
+
 </style>
 </head>
 <body>
@@ -274,7 +317,7 @@ img{max-width:100%;display:block;}
       <label class="upload-drop" id="uploadDrop" for="fileInput">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
         <div class="main-txt">Click or drop an image</div>
-        <div class="sub-txt">JPG or PNG · used to fill your card's photo window</div>
+        <div class="sub-txt">JPG or PNG · crop your photo immediately after selecting it</div>
         <div class="upload-filename" id="uploadFilename"></div>
       </label>
       <input type="file" id="fileInput" accept="image/*">
@@ -301,8 +344,35 @@ img{max-width:100%;display:block;}
   </section>
 </main>
 
+
+<!-- PHOTO CROP MODAL -->
+<div class="crop-modal hidden" id="cropModal">
+  <div class="crop-box">
+    <div class="eyebrow">STEP 01 · CROP</div>
+    <h2>Crop your photo</h2>
+    <p class="crop-help">
+      Choose exactly what appears inside the TVA photo window. Drag the image to reposition it, then use zoom if needed.
+    </p>
+    <div class="crop-stage">
+      <canvas id="cropCanvas" width="640" height="560"></canvas>
+    </div>
+    <div class="crop-controls">
+      <div class="crop-ratio">TVA ratio: 900 × 1205 · 0.7479 : 1</div>
+      <label class="crop-zoom">
+        Zoom
+        <input id="cropZoom" type="range" min="1" max="3" step="0.01" value="1">
+        <span id="cropZoomValue">1.00×</span>
+      </label>
+    </div>
+    <div class="crop-actions">
+      <button class="btn btn-outline" id="cropCancelBtn" type="button">Cancel</button>
+      <button class="btn btn-primary" id="cropApplyBtn" type="button">Use This Crop</button>
+    </div>
+  </div>
+</div>
+
 <!-- DISCLAIMER MODAL -->
-<div class="modal-backdrop" id="disclaimerModal">
+<div class="modal-backdrop" id="disclaimerModal" aria-modal="true" role="dialog">
   <div class="modal-box glass">
     <div class="eyebrow">BEFORE YOU BEGIN</div>
     <h2>Your data stays with you</h2>
@@ -313,7 +383,7 @@ img{max-width:100%;display:block;}
       <li>Close this tab and everything is gone</li>
     </ul>
     <div class="modal-actions">
-      <button class="btn btn-primary" id="proceedBtn">Got it — let's build my card</button>
+      <button class="btn btn-primary" id="proceedBtn" type="button" aria-label="Continue to card builder" onclick="document.getElementById('disclaimerModal').classList.add('hidden'); document.getElementById('fileInput')?.focus();">Got it — let's build my card</button>
     </div>
   </div>
 </div>
@@ -360,7 +430,18 @@ const CONFIG = {
   returnDurationMs: 900,
   autoRotateSpeed: 0.35,  // rad/sec
   dragSensitivity: 0.0065,
-  tiltClamp: 0.38
+  tiltClamp: 0.38,
+  // The USER_IMAGE_PLACEHOLDER mesh in the GLB is slightly smaller than
+  // the actual visible photo-window cutout in the card front, so sizing
+  // the photo plane to match the placeholder exactly still leaves a
+  // dark gap around the photo (the card's own material/back showing
+  // through at the edges). This factor intentionally oversizes the
+  // photo plane so it "bleeds" a little past the placeholder bounds and
+  // tucks under the frame edge - the same trick used for real ID-card
+  // photo templates. 1.0 = exact placeholder size (will show the gap).
+  // Bump this up if you still see a border; bring it back down if the
+  // photo starts covering/overlapping the frame artwork itself.
+  imagePlaneBleed: 1.10
 };
 
 const FILTERS = [
@@ -382,6 +463,13 @@ const loadingLabel = document.getElementById('loadingLabel');
 const fileInput = document.getElementById('fileInput');
 const uploadDrop = document.getElementById('uploadDrop');
 const uploadFilename = document.getElementById('uploadFilename');
+const cropModal = document.getElementById('cropModal');
+const cropCanvas = document.getElementById('cropCanvas');
+const cropCtx = cropCanvas.getContext('2d');
+const cropZoom = document.getElementById('cropZoom');
+const cropZoomValue = document.getElementById('cropZoomValue');
+const cropCancelBtn = document.getElementById('cropCancelBtn');
+const cropApplyBtn = document.getElementById('cropApplyBtn');
 const filterGrid = document.getElementById('filterGrid');
 const downloadBtn = document.getElementById('downloadBtn');
 const downloadBtnText = document.getElementById('downloadBtnText');
@@ -397,9 +485,15 @@ const confettiLayer = document.getElementById('confettiLayer');
 /* ============================================================
    DISCLAIMER MODAL
    ============================================================ */
-proceedBtn.addEventListener('click', () => {
+function closeDisclaimer() {
   disclaimerModal.classList.add('hidden');
-});
+  disclaimerModal.setAttribute('aria-hidden', 'true');
+  disclaimerModal.style.display = 'none';
+}
+
+if (proceedBtn && disclaimerModal) {
+  proceedBtn.addEventListener('click', closeDisclaimer);
+}
 
 /* ============================================================
    THREE.JS SCENE
@@ -432,6 +526,7 @@ scene.add(cardGroup);
 
 let modelRoot = null;
 let placeholderMesh = null;
+let imagePlane = null;
 let uploadedImage = null;
 let filterThumbCanvases = {};
 
@@ -480,16 +575,84 @@ loader.load(
   CONFIG.glbPath,
   (gltf) => {
     modelRoot = gltf.scene;
+
+    // The GLB already contains a dedicated photo-window surface.
+    // We use its exact WORLD-space bounds for a new clean PlaneGeometry
+    // instead of stretching the original mesh. This keeps the user's
+    // crop aligned with the real TVA window and prevents gaps/incorrect
+    // scaling.
+    modelRoot.updateWorldMatrix(true, true);
+
     modelRoot.traverse((obj) => {
-      if (obj.isMesh) {
-        if (!obj.geometry.attributes.normal) obj.geometry.computeVertexNormals();
-        if (obj.name === CONFIG.placeholderNodeName) {
-          placeholderMesh = obj;
-          remapUV(obj.geometry);
-        }
+      if (!obj.isMesh) return;
+      if (!obj.geometry.attributes.normal) obj.geometry.computeVertexNormals();
+
+      if (obj.name === CONFIG.placeholderNodeName) {
+        placeholderMesh = obj;
+
+        // IMPORTANT: read the placeholder's true WORLD-space size,
+        // center and orientation. The previous approach used the raw
+        // LOCAL geometry bounding box and just copied obj.position /
+        // obj.rotation / obj.scale onto the new plane - that silently
+        // ignores the placeholder's own rotation and any scale coming
+        // from parent nodes higher up the GLB hierarchy. Whenever those
+        // weren't perfectly trivial, the plane ended up smaller than
+        // (and/or offset from) the real cut-out window, which is what
+        // shows up as a dark gap around the uploaded photo. Building
+        // the transform from the world-space box instead makes this
+        // correct regardless of how the model is authored/nested.
+        const worldBox = new THREE.Box3().setFromObject(obj);
+        const worldSize = worldBox.getSize(new THREE.Vector3());
+        const worldCenter = worldBox.getCenter(new THREE.Vector3());
+
+        const worldQuat = new THREE.Quaternion();
+        obj.getWorldQuaternion(worldQuat);
+
+        // Nudge slightly along the placeholder's own forward normal so
+        // the photo plane sits just in front of the card surface
+        // (avoids z-fighting) without touching its size or alignment.
+        const normalNudge = new THREE.Vector3(0, 0, 1)
+          .applyQuaternion(worldQuat)
+          .multiplyScalar(0.03);
+        worldCenter.add(normalNudge);
+
+        // Hide the GLB placeholder surface; it is only used as the exact
+        // measurement/reference for the real uploaded-image plane.
+        obj.visible = false;
+
+        const photoMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.55,
+          metalness: 0,
+          side: THREE.DoubleSide
+        });
+
+        // Oversize slightly (see CONFIG.imagePlaneBleed) so the photo
+        // fully covers the window even though the placeholder mesh
+        // measures a bit smaller than the real cutout.
+        const bleed = CONFIG.imagePlaneBleed;
+        imagePlane = new THREE.Mesh(
+          new THREE.PlaneGeometry(worldSize.x * bleed, worldSize.y * bleed),
+          photoMaterial
+        );
+        imagePlane.name = 'UPLOADED_IMAGE_PLANE';
+
+        // Convert the world-space transform we just computed into the
+        // placeholder's parent's local space, so the plane lines up
+        // pixel-perfect with the card's window no matter how the model
+        // is rotated/scaled/nested.
+        const worldMatrix = new THREE.Matrix4().compose(
+          worldCenter, worldQuat, new THREE.Vector3(1, 1, 1)
+        );
+        const parentInverse = new THREE.Matrix4().copy(obj.parent.matrixWorld).invert();
+        const localMatrix = new THREE.Matrix4().multiplyMatrices(parentInverse, worldMatrix);
+        localMatrix.decompose(imagePlane.position, imagePlane.quaternion, imagePlane.scale);
+
+        obj.parent.add(imagePlane);
       }
     });
-    // center the model at the group's local origin
+
+    // Center the complete card at the group's local origin.
     const box = new THREE.Box3().setFromObject(modelRoot);
     const center = new THREE.Vector3();
     box.getCenter(center);
@@ -615,113 +778,344 @@ function cssFilterFor(id) {
   }
 }
 
+/*
+  The user's crop is now prepared BEFORE this function runs.
+  There is NO automatic cover-crop here.
+*/
 function buildFilteredCanvas(imgEl, filterId, outW, outH) {
   const c = document.createElement('canvas');
-  c.width = outW; c.height = outH;
+  c.width = outW;
+  c.height = outH;
   const ctx = c.getContext('2d');
-  const scale = Math.max(outW / imgEl.width, outH / imgEl.height);
-  const drawW = imgEl.width * scale, drawH = imgEl.height * scale;
-  const dx = (outW - drawW) / 2, dy = (outH - drawH) / 2;
+
+  ctx.filter = filterId === 'duotone' ? 'none' : cssFilterFor(filterId);
+  ctx.drawImage(imgEl, 0, 0, outW, outH);
+  ctx.filter = 'none';
 
   if (filterId === 'duotone') {
-    ctx.filter = 'none';
-    ctx.drawImage(imgEl, dx, dy, drawW, drawH);
     applyDuotone(ctx, outW, outH);
-  } else {
-    ctx.filter = cssFilterFor(filterId);
-    ctx.drawImage(imgEl, dx, dy, drawW, drawH);
-    ctx.filter = 'none';
   }
+
   return c;
 }
 
 let activeTexture = null;
+
+/* -------------------- MANUAL CROP TOOL -------------------- */
+const CROP_W = 360;
+const CROP_H = Math.round(CROP_W * CONFIG.texH / CONFIG.texW);
+const CROP_X = (cropCanvas.width - CROP_W) / 2;
+const CROP_Y = (cropCanvas.height - CROP_H) / 2;
+
+let cropSourceImage = null;
+let cropBaseScale = 1;
+let cropOffsetX = 0;
+let cropOffsetY = 0;
+let cropDragging = false;
+let cropPointer = { x: 0, y: 0 };
+
+function cropImageScale() {
+  return cropBaseScale * Number(cropZoom.value);
+}
+
+function clampCropOffsets() {
+  if (!cropSourceImage) return;
+
+  const scale = cropImageScale();
+  const drawW = cropSourceImage.naturalWidth * scale;
+  const drawH = cropSourceImage.naturalHeight * scale;
+
+  const minX = CROP_X + CROP_W - (CROP_X + drawW);
+  const maxX = CROP_X;
+  const minY = CROP_Y + CROP_H - (CROP_Y + drawH);
+  const maxY = CROP_Y;
+
+  cropOffsetX = Math.min(maxX, Math.max(minX, cropOffsetX));
+  cropOffsetY = Math.min(maxY, Math.max(minY, cropOffsetY));
+}
+
+function drawCropTool() {
+  if (!cropSourceImage) return;
+
+  const scale = cropImageScale();
+  const drawW = cropSourceImage.naturalWidth * scale;
+  const drawH = cropSourceImage.naturalHeight * scale;
+
+  const x = CROP_X + (CROP_W - drawW) / 2 + cropOffsetX;
+  const y = CROP_Y + (CROP_H - drawH) / 2 + cropOffsetY;
+
+  cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+  cropCtx.fillStyle = '#111';
+  cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+
+  cropCtx.save();
+  cropCtx.beginPath();
+  cropCtx.rect(CROP_X, CROP_Y, CROP_W, CROP_H);
+  cropCtx.clip();
+  cropCtx.drawImage(cropSourceImage, x, y, drawW, drawH);
+  cropCtx.restore();
+
+  // Dark overlay outside the exact crop window.
+  cropCtx.fillStyle = 'rgba(0,0,0,.68)';
+  cropCtx.fillRect(0, 0, cropCanvas.width, CROP_Y);
+  cropCtx.fillRect(0, CROP_Y + CROP_H, cropCanvas.width, cropCanvas.height - (CROP_Y + CROP_H));
+  cropCtx.fillRect(0, CROP_Y, CROP_X, CROP_H);
+  cropCtx.fillRect(CROP_X + CROP_W, CROP_Y, cropCanvas.width - (CROP_X + CROP_W), CROP_H);
+
+  // Crop border.
+  cropCtx.strokeStyle = '#FF6B4A';
+  cropCtx.lineWidth = 2;
+  cropCtx.strokeRect(CROP_X + 1, CROP_Y + 1, CROP_W - 2, CROP_H - 2);
+
+  // Rule-of-thirds guides.
+  cropCtx.strokeStyle = 'rgba(255,255,255,.28)';
+  cropCtx.lineWidth = 1;
+  for (let i = 1; i < 3; i++) {
+    const gx = CROP_X + (CROP_W * i / 3);
+    const gy = CROP_Y + (CROP_H * i / 3);
+
+    cropCtx.beginPath();
+    cropCtx.moveTo(gx, CROP_Y);
+    cropCtx.lineTo(gx, CROP_Y + CROP_H);
+    cropCtx.stroke();
+
+    cropCtx.beginPath();
+    cropCtx.moveTo(CROP_X, gy);
+    cropCtx.lineTo(CROP_X + CROP_W, gy);
+    cropCtx.stroke();
+  }
+}
+
+function openCropTool() {
+  if (!cropSourceImage) return;
+
+  // Start with the largest possible crop at the TVA ratio.
+  cropBaseScale = Math.max(
+    CROP_W / cropSourceImage.naturalWidth,
+    CROP_H / cropSourceImage.naturalHeight
+  );
+
+  cropOffsetX = 0;
+  cropOffsetY = 0;
+  cropZoom.value = '1';
+  cropZoomValue.textContent = '1.00×';
+
+  clampCropOffsets();
+  cropModal.classList.remove('hidden');
+  drawCropTool();
+}
+
+function closeCropTool() {
+  cropModal.classList.add('hidden');
+  cropDragging = false;
+}
+
+function applyCrop() {
+  if (!cropSourceImage) return;
+
+  const scale = cropImageScale();
+  const drawW = cropSourceImage.naturalWidth * scale;
+  const drawH = cropSourceImage.naturalHeight * scale;
+
+  const x = CROP_X + (CROP_W - drawW) / 2 + cropOffsetX;
+  const y = CROP_Y + (CROP_H - drawH) / 2 + cropOffsetY;
+
+  // Convert the visible crop rectangle into source-image coordinates.
+  const sx = (CROP_X - x) / scale;
+  const sy = (CROP_Y - y) / scale;
+  const sw = CROP_W / scale;
+  const sh = CROP_H / scale;
+
+  const output = document.createElement('canvas');
+  output.width = CONFIG.texW;
+  output.height = CONFIG.texH;
+
+  const ctx = output.getContext('2d');
+  ctx.drawImage(
+    cropSourceImage,
+    sx, sy, sw, sh,
+    0, 0, CONFIG.texW, CONFIG.texH
+  );
+
+  const croppedImage = new Image();
+
+  croppedImage.onload = () => {
+    uploadedImage = croppedImage;
+    currentFilter = 'original';
+
+    refreshFilterThumbnails();
+
+    document.querySelectorAll('.filter-swatch').forEach((el, i) => {
+      el.classList.toggle('active', FILTERS[i].id === currentFilter);
+    });
+
+    updateCardTexture();
+
+    downloadBtn.disabled = false;
+
+    closeCropTool();
+  };
+
+  croppedImage.src = output.toDataURL('image/png');
+}
+
+cropZoom.addEventListener('input', () => {
+  if (!cropSourceImage) return;
+
+  cropZoomValue.textContent = `${Number(cropZoom.value).toFixed(2)}×`;
+  clampCropOffsets();
+  drawCropTool();
+});
+
+cropCanvas.addEventListener('pointerdown', (e) => {
+  if (!cropSourceImage) return;
+
+  cropDragging = true;
+  cropPointer = { x: e.clientX, y: e.clientY };
+  cropCanvas.setPointerCapture(e.pointerId);
+});
+
+cropCanvas.addEventListener('pointermove', (e) => {
+  if (!cropDragging) return;
+
+  const rect = cropCanvas.getBoundingClientRect();
+  const scaleX = cropCanvas.width / rect.width;
+  const scaleY = cropCanvas.height / rect.height;
+
+  cropOffsetX += (e.clientX - cropPointer.x) * scaleX;
+  cropOffsetY += (e.clientY - cropPointer.y) * scaleY;
+
+  cropPointer = { x: e.clientX, y: e.clientY };
+
+  clampCropOffsets();
+  drawCropTool();
+});
+
+cropCanvas.addEventListener('pointerup', () => {
+  cropDragging = false;
+});
+
+cropCanvas.addEventListener('pointercancel', () => {
+  cropDragging = false;
+});
+
+cropCancelBtn.addEventListener('click', closeCropTool);
+cropApplyBtn.addEventListener('click', applyCrop);
+
+/* -------------------- FILTERS -------------------- */
 function updateCardTexture() {
-  if (!uploadedImage || !placeholderMesh) return;
-  const c = buildFilteredCanvas(uploadedImage, currentFilter, CONFIG.texW, CONFIG.texH);
+  if (!uploadedImage || !imagePlane) return;
+
+  const c = buildFilteredCanvas(
+    uploadedImage,
+    currentFilter,
+    CONFIG.texW,
+    CONFIG.texH
+  );
+
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  // This model's UVs (like the rest of its GLTF-authored meshes) assume flipY=false textures.
-  // CanvasTexture defaults to flipY=true, which is what was flipping the photo vertically.
-  tex.flipY = false;
+  // PlaneGeometry uses the normal canvas orientation.
+  tex.flipY = true;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
   tex.needsUpdate = true;
 
   if (activeTexture) activeTexture.dispose();
   activeTexture = tex;
 
-  placeholderMesh.material = new THREE.MeshStandardMaterial({
-    map: tex,
-    roughness: 0.55,
-    metalness: 0.0,
-    side: THREE.DoubleSide
-  });
+  imagePlane.material.map = tex;
+  imagePlane.material.color.set(0xffffff);
+  imagePlane.material.needsUpdate = true;
 }
 
 function buildFilterGrid() {
   filterGrid.innerHTML = '';
+
   FILTERS.forEach((f) => {
     const btn = document.createElement('button');
     btn.className = 'filter-swatch' + (f.id === currentFilter ? ' active' : '');
     btn.type = 'button';
+
     const c = document.createElement('canvas');
     btn.appendChild(c);
+
     const label = document.createElement('span');
     label.textContent = f.label;
     btn.appendChild(label);
+
     btn.addEventListener('click', () => {
       if (!uploadedImage) return;
+
       currentFilter = f.id;
-      document.querySelectorAll('.filter-swatch').forEach(el => el.classList.remove('active'));
+
+      document.querySelectorAll('.filter-swatch')
+        .forEach(el => el.classList.remove('active'));
+
       btn.classList.add('active');
       updateCardTexture();
     });
+
     filterGrid.appendChild(btn);
   });
 }
+
 buildFilterGrid();
 
 function refreshFilterThumbnails() {
   const swatches = filterGrid.querySelectorAll('.filter-swatch');
+
   swatches.forEach((el, i) => {
     const f = FILTERS[i];
     const c = el.querySelector('canvas');
+
     if (!uploadedImage) {
       el.classList.remove('enabled');
-      c.width = 90; c.height = 120;
+      c.width = 90;
+      c.height = 120;
+
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#EFE9D8'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.fillStyle = '#EFE9D8';
+      ctx.fillRect(0, 0, c.width, c.height);
       return;
     }
+
     el.classList.add('enabled');
+
     const thumb = buildFilteredCanvas(uploadedImage, f.id, 120, 160);
-    c.width = thumb.width; c.height = thumb.height;
+    c.width = thumb.width;
+    c.height = thumb.height;
     c.getContext('2d').drawImage(thumb, 0, 0);
   });
 }
 
-/* ============================================================
-   UPLOAD HANDLING
-   ============================================================ */
+/* -------------------- UPLOAD HANDLING -------------------- */
 function handleFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
+
   uploadFilename.textContent = file.name;
+
   const reader = new FileReader();
+
   reader.onload = (e) => {
     const img = new Image();
+
     img.onload = () => {
-      uploadedImage = img;
-      currentFilter = 'original';
-      refreshFilterThumbnails();
-      document.querySelectorAll('.filter-swatch').forEach((el, i) => {
-        el.classList.toggle('active', FILTERS[i].id === currentFilter);
-      });
-      updateCardTexture();
-      downloadBtn.disabled = false;
+      cropSourceImage = img;
+
+      // Do NOT automatically crop the photo.
+      // Open the manual crop tool immediately after the user selects/drops a photo.
+      openCropTool();
     };
+
     img.src = e.target.result;
   };
+
   reader.readAsDataURL(file);
 }
+
 fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
 ['dragover', 'dragenter'].forEach(evt =>
   uploadDrop.addEventListener(evt, (e) => { e.preventDefault(); uploadDrop.classList.add('drag'); })
@@ -734,28 +1128,101 @@ uploadDrop.addEventListener('drop', (e) => handleFile(e.dataTransfer.files[0]));
 /* ============================================================
    HIGH-RES CAPTURE + ZIP DOWNLOAD
    ============================================================ */
+async function cropTransparentPixels(sourceCanvas) {
+  // WebGL owns the original canvas, so we cannot call getContext("2d")
+  // directly on it. First copy the rendered frame into a normal 2D canvas.
+  const dataURL = sourceCanvas.toDataURL('image/png');
+
+  const image = new Image();
+  image.src = dataURL;
+  if (image.decode) {
+    await image.decode();
+  } else {
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+    });
+  }
+
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = image.naturalWidth || image.width;
+  tempCanvas.height = image.naturalHeight || image.height;
+
+  const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+  tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+  tempCtx.drawImage(image, 0, 0);
+
+  const { width, height } = tempCanvas;
+  const pixels = tempCtx.getImageData(0, 0, width, height).data;
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const alpha = pixels[(y * width + x) * 4 + 3];
+
+      if (alpha > 5) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  // If the render contains no visible pixels, keep the original export.
+  if (maxX < 0 || maxY < 0) {
+    return tempCanvas;
+  }
+
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+
+  const cropped = document.createElement('canvas');
+  cropped.width = cropW;
+  cropped.height = cropH;
+
+  const cropCtx = cropped.getContext('2d');
+  cropCtx.clearRect(0, 0, cropW, cropH);
+  cropCtx.drawImage(
+    tempCanvas,
+    minX, minY, cropW, cropH,
+    0, 0, cropW, cropH
+  );
+
+  return cropped;
+}
+
 async function captureFrontAndBack() {
   const prevMode = mode;
   mode = 'frozen';
   const prevRotX = cardGroup.rotation.x, prevRotY = cardGroup.rotation.y;
 
-  const box = new THREE.Box3().setFromObject(cardGroup);
-  const size = new THREE.Vector3(); box.getSize(size);
-  const exportW = 1500;
-  const exportH = Math.round(exportW / (size.x / size.y));
+  // Render large, then crop away every transparent pixel outside the card.
+  const exportW = 2400;
+  const exportH = 3200;
 
   renderer.setSize(exportW, exportH, false);
   camera.aspect = exportW / exportH;
-  fitCameraToCard(1.06);
+  camera.updateProjectionMatrix();
+  fitCameraToCard(1.01);
 
+  // FRONT
   cardGroup.rotation.set(0, 0, 0);
   renderer.render(scene, camera);
-  const frontURL = renderer.domElement.toDataURL('image/png');
+  const frontCanvas = await cropTransparentPixels(renderer.domElement);
+  const frontURL = frontCanvas.toDataURL('image/png');
 
+  // BACK
   cardGroup.rotation.set(0, Math.PI, 0);
   renderer.render(scene, camera);
-  const backURL = renderer.domElement.toDataURL('image/png');
+  const backCanvas = await cropTransparentPixels(renderer.domElement);
+  const backURL = backCanvas.toDataURL('image/png');
 
+  // Restore the live viewer exactly as it was.
   cardGroup.rotation.set(prevRotX, prevRotY, 0);
   resizeRendererToStage();
   mode = prevMode === 'frozen' ? 'idle' : prevMode;
@@ -799,16 +1266,20 @@ function showSuccess() {
 makeAnotherBtn.addEventListener('click', () => {
   successModal.classList.add('hidden');
   uploadedImage = null;
+  cropSourceImage = null;
   currentFilter = 'original';
   fileInput.value = '';
   uploadFilename.textContent = '';
   downloadBtn.disabled = true;
   refreshFilterThumbnails();
-  if (placeholderMesh) {
-    if (activeTexture) { activeTexture.dispose(); activeTexture = null; }
-    placeholderMesh.material = new THREE.MeshStandardMaterial({
-      color: 0x000000, transparent: true, opacity: 0, side: THREE.DoubleSide
-    });
+  if (activeTexture) {
+    activeTexture.dispose();
+    activeTexture = null;
+  }
+  if (imagePlane) {
+    imagePlane.material.map = null;
+    imagePlane.material.color.set(0xffffff);
+    imagePlane.material.needsUpdate = true;
   }
 });
 shareBtn.addEventListener('click', async () => {
@@ -828,7 +1299,7 @@ shareBtn.addEventListener('click', async () => {
     }
   }
 });
-visitPortfolioBtn.addEventListener('click', () => { window.location.href = 'index.html'; });
+visitPortfolioBtn.addEventListener('click', () => { window.location.href = '/'; });
 
 function showToast(msg) {
   toastEl.textContent = msg;
